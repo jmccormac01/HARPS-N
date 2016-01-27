@@ -62,14 +62,14 @@ def analyseStellarSpectra(stellar_ccf_G2):
 			for k in range(0,montage_dim):
 				ax = fig.add_subplot(montage_dim, montage_dim, c+1, xticks=[], yticks=[])		
 				if c < len(data):
+					# try fitting a Gaussian to the ccf
+					# tweak y values to help the fit
+					# only fit those that are not 0s
 					x=np.arange(0,len(data[c]))
 					xn=(x+cdelt1)+crval1
 					t_data=data[c]-max(data[c])	
 					ax.plot(xn,t_data,'b.')
 					ax.set_title('order %d' % (c+1))
-					# try fitting a Gaussian to the ccf
-					# tweak y values to help the fit
-					# only fit those that are not 0s
 					if max(data[c]) > 0 and np.std(data[c]) > 0:
 						p0=estimateGaussianParams(t_data,xn)
 						coeff,cov=curve_fit(Gaussian,xn,t_data,p0)
