@@ -15,6 +15,14 @@ bisector lines (bis_G2_A/B) and data files with Gaussian parameters
 fitted to the CCFs from different orders (_ccf_G2_A/B.tbl).
 """
 
+"""
+Questions:
+	How exactly is the final combined CCF made? Is it a simple summation?
+	Have there been SNR limits applied? 
+	There seems to be no Gaussian in the sky CCF, so the fit fails.
+	Another way to correct the affected RV points?
+"""
+
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as pl
 from astropy.io import fits
@@ -38,7 +46,7 @@ def estimateGaussianParams(tdata,xn):
 	return [min(t_data) - max(t_data),np.median(xn),np.std(xn)] 
 
 # code below is for analysing the stellar CCFs
-def analyseStellarSpectra(stellar_ccf_G2):
+def analyseStellarCCFs(stellar_ccf_G2):
 	amp=np.empty(len(stellar_ccf_G2))
 	rv=np.empty(len(stellar_ccf_G2))
 	fwhm=np.empty(len(stellar_ccf_G2))
@@ -105,6 +113,10 @@ def analyseStellarSpectra(stellar_ccf_G2):
 	pl.savefig('SummaryResults.png',dpi=300)
 	return mjd,rv_corr,amp,fwhm
 
+# code below is for analysing the sky CCFs
+#def analyseSkyCCFs(sky_ccf_G2):
+
+
 
 if __name__ == '__main__':
 	# get lists of the different HARPS-N DRS
@@ -120,5 +132,60 @@ if __name__ == '__main__':
 	sky_gauss_ccf_G2=g.glob('*ccf_G2_B.tbl')
 
 	# analyse the stellar spectra
-	mjd,rv_corr,amp,fwhm=analyseStellarSpectra(stellar_ccf_G2)
+	#mjd,rv_corr,amp,fwhm=analyseStellarCCFs(stellar_ccf_G2)
+	#analyseSkyCCFs(sky_ccf_G2)
+	
+	amp=np.empty(len(sky_ccf_G2))
+	rv=np.empty(len(sky_ccf_G2))
+	fwhm=np.empty(len(sky_ccf_G2))
+	mjd=np.empty(len(sky_ccf_G2))
+
+	for i in range(0,len(sky_ccf_G2)):
+		h=fits.open(sky_ccf_G2[i])
+		crval1=h[0].header['CRVAL1']
+		cdelt1=h[0].header['CDELT1']
+		mjd[i]=h[0].header['MJD-OBS']
+		data=h[0].data
+		
+		# prepare the plotting array
+		fig = pl.figure(i+1,figsize=(15,15))
+		fig.clf()
+		fig.suptitle('%s CCFs' % (sky_ccf_G2[i]))
+		seaborn.axes_style("darkgrid")
+		montage_dim=int(ceil(sqrt(len(data))))
+		c=0
+		for j in range(0,montage_dim):
+			for k in range(0,montage_dim):
+				ax = fig.add_subplot(montage_dim, montage_dim, c+1, xticks=[], yticks=[])		
+				if c < len(data):
+					# try fitting a Gaussian to the ccf
+					# tweak y values to help the fit
+					# only fit those that are not 0s
+					x=np.arange(0,len(data[c]))
+					xn=(x+cdelt1)+crval1
+					t_data=data[c]-max(data[c])	
+					ax.plot(xn,t_data,'b.')
+					ax.set_title('order %d' % (c+1))
+					if max(data[c]) > 0 and np.std(data[c]) > 0:
+						p0=estimateGaussianParams(t_data,xn)
+						try:
+							coeff,cov=curve_fit(Gaussian,xn,t_data,p0)
+							yfit = Gaussian(xn, *coeff)
+							print ('[%d/%d] x0=%.4f ' % (c+1,len(data),coeff[1]))
+							ax.plot(xn,yfit,'r--')
+							if c == len(data)-1:
+								amp[i]=coeff[0]
+								rv[i]=coeff[1]
+								fwhm[i]=coeff[2]
+						except RuntimeError:
+							print ('[%d/%d] fit did not converge ' % (c+1,len(data)))
+							if c == len(data)-1:
+								print ('[%d/%d] FINAL FIT DID NOT CONVERGE! ' % (c+1,len(data)))
+
+					else:
+						print('[%d/%d] Cannot fit zeros' % (c+1,len(data)))
+					c+=1
+					#print("[%d/%d]" % (c,len(data)))
+		# plot the montage of CCFs
+		fig.savefig('%s.png' % (sky_ccf_G2[i]),dpi=300)
 
